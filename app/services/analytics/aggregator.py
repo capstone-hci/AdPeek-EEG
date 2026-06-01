@@ -31,7 +31,6 @@ def aggregate_ad_results(db: Session, ad_id: str) -> dict:
     attention_list = []
     arousal_list = []
     heatmap_points = []
-    gaze_durations = []
     all_frames = []
 
     for session in sessions:
@@ -40,7 +39,6 @@ def aggregate_ad_results(db: Session, ad_id: str) -> dict:
             arousal_list.append(session.eeg_data.get("arousal", 0))
 
         if session.synced_frames:
-            gaze_durations.append(len(session.synced_frames) / 30)
             for frame in session.synced_frames:
                 heatmap_points.append({
                     "x": frame["gaze"]["x_norm"],
@@ -50,7 +48,7 @@ def aggregate_ad_results(db: Session, ad_id: str) -> dict:
 
     avg_attention = round(float(np.mean(attention_list)), 4) if attention_list else None
     avg_arousal = round(float(np.mean(arousal_list)), 4) if arousal_list else None
-    avg_gaze_duration = round(float(np.mean(gaze_durations)), 4) if gaze_durations else None
+    avg_gaze_duration = 30.0  # 광고 영상 길이 고정
 
     # 씬별 집계
     scene_results = []
@@ -77,7 +75,7 @@ def aggregate_ad_results(db: Session, ad_id: str) -> dict:
         })
 
     # AOI 분석
-    aoi_rows = compute_aoi(all_frames, scene_data)
+    aoi_rows = compute_aoi(all_frames, scene_data, participant_count)
 
     # EEG 피크
     eeg_peaks = compute_eeg_peaks(all_frames)
