@@ -29,10 +29,7 @@ def get_area_type(cell: int, grid: dict) -> Optional[str]:
     return None
 
 
-def compute_aoi(frames: list, scenes: list) -> dict:
-    """
-    전체 프레임 기준 AOI 영역별 dwell time + 주시 횟수 계산
-    """
+def compute_aoi(frames: list, scenes: list, participant_count: int = 1) -> dict:
     area_frames = {"product": 0, "person": 0, "text": 0, "background": 0}
 
     for frame in frames:
@@ -40,7 +37,6 @@ def compute_aoi(frames: list, scenes: list) -> dict:
         x = frame["gaze"]["x_norm"]
         y = frame["gaze"]["y_norm"]
 
-        # 현재 씬 찾기
         current_scene = None
         for scene in scenes:
             if scene["start"] <= elapsed_sec < scene["end"]:
@@ -56,18 +52,15 @@ def compute_aoi(frames: list, scenes: list) -> dict:
         if area:
             area_frames[area] += 1
 
-    # 30Hz 기준 → 초 변환
-    total_frames = max(sum(area_frames.values()), 1)
-
     aoi_rows = []
     for area, count in sorted(area_frames.items(), key=lambda x: -x[1]):
         if count == 0:
             continue
-        dwell_sec = round(count / 30, 1)
+        dwell_sec = round((count / 30) / participant_count, 1)  # 참여자 수로 나눔
         aoi_rows.append({
             "area": _area_label(area),
             "dwell": f"{dwell_sec}초",
-            "count": count,
+            "count": count // participant_count,
         })
 
     return aoi_rows
