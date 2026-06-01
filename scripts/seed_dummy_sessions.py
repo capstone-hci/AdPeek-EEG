@@ -6,8 +6,17 @@ import math
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from app.core.database import SessionLocal
+from urllib.parse import urlparse
+
+from app.core.database import SessionLocal, get_database_url
 from app.database.models import Session as SessionModel, Survey, AdResult
+
+
+def _db_target_label() -> str:
+    parsed = urlparse(get_database_url())
+    host = parsed.hostname or "unknown"
+    db = (parsed.path or "").lstrip("/") or "unknown"
+    return f"{host}/{db}"
 
 CELL_COORDS = {
     1: (0.17, 0.17), 2: (0.50, 0.17), 3: (0.83, 0.17),
@@ -158,13 +167,19 @@ SURVEY_DATA = [
 
 
 def seed():
+    print(f"대상 DB: {_db_target_label()}")
+    print("(배포 DB면 DATABASE_URL=Render_External_URL 을 앞에 붙여 실행하세요)\n")
+
     db = SessionLocal()
     try:
-        db.query(SessionModel).filter(SessionModel.ad_id == "ad_001").delete()
-        db.query(Survey).filter(Survey.ad_id == "ad_001").delete()
-        db.query(AdResult).filter(AdResult.ad_id == "ad_001").delete()
+        n_sessions = db.query(SessionModel).delete()
+        n_surveys = db.query(Survey).delete()
+        n_results = db.query(AdResult).delete()
         db.commit()
-        print("기존 데이터 삭제 완료")
+        print(
+            f"기존 데이터 삭제 완료 "
+            f"(sessions {n_sessions}, surveys {n_surveys}, ad_results {n_results})"
+        )
 
         for i in range(15):
             frames = generate_gaze_frames(i)
