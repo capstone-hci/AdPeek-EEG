@@ -9,14 +9,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app.core.database import SessionLocal
 from app.database.models import Session as SessionModel, Survey, AdResult
 
-# 그리드 셀 중심 좌표
 CELL_COORDS = {
     1: (0.17, 0.17), 2: (0.50, 0.17), 3: (0.83, 0.17),
     4: (0.17, 0.50), 5: (0.50, 0.50), 6: (0.83, 0.50),
     7: (0.17, 0.83), 8: (0.50, 0.83), 9: (0.83, 0.83),
 }
 
-# 씬 데이터 (product/text 강조)
 SCENES = [
     {"scene": 1,  "start": 0.00,  "end": 1.67,  "grid": {"person": [5, 8], "background": [1,2,3,4,6,7,9], "text": [], "product": []}},
     {"scene": 2,  "start": 1.67,  "end": 4.07,  "grid": {"person": [2,5,8], "background": [1,3,4,7], "text": [6,9], "product": []}},
@@ -30,7 +28,7 @@ SCENES = [
     {"scene": 10, "start": 14.28, "end": 17.08, "grid": {"person": [6], "background": [1,2,3,4,5], "text": [7,8,9], "product": []}},
     {"scene": 11, "start": 17.08, "end": 17.85, "grid": {"person": [2,5,8], "background": [1,3,4,6,7,9], "text": [], "product": []}},
     {"scene": 12, "start": 17.85, "end": 20.72, "grid": {"person": [2,5,8], "background": [1,3,4,6,7,9], "text": [], "product": []}},
-    {"scene": 13, "start": 20.72, "end": 23.32, "grid": {"person": [5], "background": [1,2,3,4,6,7,8,9], "text": [], "product": []}},
+    {"scene": 13, "start": 20.72, "end": 25.79, "grid": {"person": [5], "background": [1,2,3,4,6,7,8,9], "text": [], "product": []}},
     {"scene": 14, "start": 25.79, "end": 30.02, "grid": {"person": [], "background": [1,2,3,4,6,7,8,9], "text": [5], "product": []}},
 ]
 
@@ -49,50 +47,69 @@ def is_product_or_text_scene(scene: dict) -> bool:
 
 
 def get_focus_cell(scene: dict) -> int:
-    """제품/텍스트 씬이면 해당 셀, 아니면 배경"""
-    if scene["grid"]["product"]:
+    r = random.random()
+    if r < 0.5 and scene["grid"]["product"]:
         return random.choice(scene["grid"]["product"])
-    if scene["grid"]["text"]:
+    elif r < 0.7 and scene["grid"]["text"]:
         return random.choice(scene["grid"]["text"])
-    if scene["grid"]["person"]:
+    elif r < 0.85 and scene["grid"]["person"]:
         return random.choice(scene["grid"]["person"])
-    return random.choice(scene["grid"]["background"])
+    else:
+        cells = scene["grid"]["background"] or scene["grid"]["person"] or [5]
+        return random.choice(cells)
 
 
-def add_noise(val: float, noise: float = 0.03) -> float:
-    return round(max(0.0, min(1.0, val + random.uniform(-noise, noise))), 3)
+def add_noise(val: float, noise: float = 0.12) -> float:
+    return round(max(0.0, min(1.0, val + random.gauss(0, noise))), 3)
 
 
 def generate_gaze_frames(participant_id: int) -> list:
-    """30Hz × 30초 = 900프레임 생성"""
     frames = []
-    total_frames = 900  # 30s × 30Hz
+    base_attention = random.uniform(4.5, 6.0)
+    base_arousal = random.uniform(6.0, 8.0)
 
-    base_attention = random.uniform(3.0, 4.5)
-    base_arousal = random.uniform(5.0, 7.0)
+    peak_start = random.uniform(8.0, 10.0)
+    peak_end = peak_start + random.uniform(3.0, 5.0)
 
-    for i in range(total_frames):
+    for i in range(910):
         elapsed_ms = i * 33
         elapsed_sec = elapsed_ms / 1000
 
+        if elapsed_sec > 30.02:
+            break
+
         scene = get_scene_at(elapsed_sec)
         if not scene:
+            if frames:
+                prev = frames[-1]
+                frames.append({
+                    "timestamp": round(elapsed_sec, 3),
+                    "elapsed_ms": elapsed_ms,
+                    "gaze": prev["gaze"],
+                    "eeg": {
+                        "attention": round(prev["eeg"]["attention"] * 0.95, 4),
+                        "arousal": round(prev["eeg"]["arousal"] * 0.95, 4),
+                    }
+                })
             continue
 
-        # 제품/텍스트 씬에서 집중도/각성도 상승
         is_focus = is_product_or_text_scene(scene)
-        if is_focus:
-            attention = base_attention + random.uniform(2.5, 4.5) + math.sin(i * 0.1) * 0.5
-            arousal = base_arousal + random.uniform(3.0, 6.0) + math.cos(i * 0.1) * 0.8
-        else:
-            attention = base_attention + random.uniform(-0.5, 1.0)
-            arousal = base_arousal + random.uniform(-1.0, 1.5)
+        is_peak = peak_start <= elapsed_sec <= peak_end
 
-        # gaze 좌표 — 제품/텍스트에 집중
+        if is_peak and is_focus:
+            attention = base_attention + random.uniform(4.0, 6.0) + math.sin(i * 0.15) * 1.0
+            arousal = base_arousal + random.uniform(5.0, 8.0) + math.cos(i * 0.15) * 1.2
+        elif is_focus:
+            attention = base_attention + random.uniform(2.0, 3.5)
+            arousal = base_arousal + random.uniform(2.5, 4.5)
+        else:
+            attention = base_attention + random.uniform(-1.0, 0.5)
+            arousal = base_arousal + random.uniform(-1.5, 1.0)
+
         cell = get_focus_cell(scene)
         cx, cy = CELL_COORDS[cell]
-        x_norm = add_noise(cx, 0.08)
-        y_norm = add_noise(cy, 0.08)
+        x_norm = add_noise(cx, 0.12)
+        y_norm = add_noise(cy, 0.12)
 
         frames.append({
             "timestamp": round(elapsed_sec, 3),
@@ -121,7 +138,6 @@ def generate_eeg_summary(frames: list) -> dict:
     }
 
 
-# 설문 데이터 (15명 기준 — recall 약 67%, positive 약 60%)
 SURVEY_DATA = [
     ("yes", 5, "positive"),
     ("yes", 4, "positive"),
@@ -144,7 +160,6 @@ SURVEY_DATA = [
 def seed():
     db = SessionLocal()
     try:
-        # 기존 데이터 삭제
         db.query(SessionModel).filter(SessionModel.ad_id == "ad_001").delete()
         db.query(Survey).filter(Survey.ad_id == "ad_001").delete()
         db.query(AdResult).filter(AdResult.ad_id == "ad_001").delete()
