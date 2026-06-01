@@ -72,5 +72,8 @@ def compute_survey_insights(surveys: list) -> dict:
 
 
 def compute_attention_percent(avg_attention: float) -> int:
-    normalized = min(avg_attention / 10.0, 1.0)
-    return round(normalized * 100)
+    """
+    EEG attention 지표(약 0~10) → 0~100% 표시값.
+    지표 × 10 (예: 7.35 → 73). 별도 ÷10 정규화 없음.
+    """
+    return round(min(max(avg_attention, 0.0) * 10.0, 100.0))
